@@ -112,6 +112,12 @@ READINESS_LABELS = {
 TRAY_RESTART_WAIT = 300.0
 
 
+def menu_text(value: str, limit: int = 48) -> str:
+    """原生菜单不折行；详细路径留在配置页，菜单中的每行限制宽度。"""
+    text = " ".join(value.split())
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
 def tray_restart_required(changed_paths: tuple[str, ...]) -> bool:
     """这次更新动没动托盘自己的代码。"""
     return any(path in TRAY_SOURCES for path in changed_paths)
@@ -280,6 +286,7 @@ class ServiceManager:
         self._last_health: dict[str, tuple[bool, str]] = {
             spec.name: (False, "未检测") for spec in specs
         }
+        self._mount_warnings: dict[str, tuple[str, ...]] = {}
         self._lock = threading.RLock()
 
     def healthy(self, spec: ServiceSpec) -> bool:
@@ -287,6 +294,7 @@ class ServiceManager:
         # HTTP 代理，httpx 默认读它（urllib.getproxies 在 macOS 走系统配置），于是
         # 探测 http://127.0.0.1 的请求被送进代理、由代理回 503——服务明明活着，
         # 状态却显示「未运行」。实测 Stash 开着时就是这样，HTTPS 探测不受影响。
+        warnings: tuple[str, ...] = ()
         try:
             response = self._health_get(
                 spec.health_url, timeout=0.5, verify=spec.verify, trust_env=False,
@@ -295,13 +303,15 @@ class ServiceManager:
             ok = response.status_code == 200 and payload.get("ok") is True
             detail = "" if ok else f"状态码 {response.status_code}"
             if ok and isinstance(payload.get("media_mounts"), dict):
-                warnings = payload["media_mounts"].get("warnings", [])
-                if isinstance(warnings, list):
-                    detail = "；".join(value[:120] for value in warnings[:3] if isinstance(value, str))
+                values = payload["media_mounts"].get("warnings", [])
+                if isinstance(values, list):
+                    warnings = tuple(value for value in values if isinstance(value, str) and value.strip())
+                    detail = "；".join(value[:120] for value in warnings[:3])
         except (httpx.HTTPError, OSError, ValueError, AttributeError):
             ok, detail = False, "无响应"
         with self._lock:
             self._last_health[spec.name] = (ok, detail)
+            self._mount_warnings[spec.name] = warnings
         return ok
 
     @property
@@ -322,6 +332,27 @@ class ServiceManager:
                 parts.append(f"{spec.name.upper()} {state}")
         return " · ".join(parts)
 
+    def status_summary(self) -> str:
+        """两种托盘共用的短状态；同一个挂载提醒不因 HTTP/HTTPS 重复计数。"""
+        with self._lock:
+            healthy = sum(self._last_health[spec.name][0] for spec in self.specs)
+            warnings = set(value for spec in self.specs
+                           for value in self._mount_warnings.get(spec.name, ()))
+            state = ("运行中" if healthy == len(self.specs) else "部分服务异常") if healthy else "服务未运行"
+        return f"{state} · {len(warnings)} 项提醒" if warnings else state
+
+    def status_details(self) -> tuple[str, ...]:
+        """服务与挂载分行呈现，避免一行堆入所有来源。"""
+        with self._lock:
+            services = []
+            for spec in self.specs:
+                ok, detail = self._last_health[spec.name]
+                state = "正常" if ok else f"异常（{detail}）" if detail else "异常"
+                services.append(menu_text(f"{spec.name.upper()} {state}"))
+            warnings = dict.fromkeys(value for spec in self.specs
+                                     for value in self._mount_warnings.get(spec.name, ()))
+        return tuple(services + [menu_text(value) for value in warnings])
+
     def replace_specs(
         self, specs: tuple[ServiceSpec, ...], *, log_dir: Path | None = None,
         extra_env: dict[str, str] | None = None,
@@ -338,6 +369,7 @@ class ServiceManager:
             if extra_env is not None:
                 self._extra_env = dict(extra_env)
             self._last_health = {spec.name: (False, "未检测") for spec in self.specs}
+            self._mount_warnings.clear()
 
     def child_environment(self) -> dict[str, str]:
         environment = os.environ.copy()
@@ -897,8 +929,8 @@ class SetupGate:
 
     def status_line(self) -> str:
         if self._waiting:
-            return f"等待完成首次设置 · {self.manager.status()}"
-        return self.manager.status()
+            return "等待完成首次设置"
+        return self.manager.status_summary()
 
     def open(self) -> None:
         self._open_browser(self.open_url())
@@ -1057,7 +1089,14 @@ class PeachTray:
             pystray.Menu(
                 pystray.MenuItem(lambda _item: self.gate.open_label(), self.open, default=True),
                 pystray.MenuItem("配置 Peach", lambda *_: webbrowser.open(self.gate.open_url() + "configuration")),
-                pystray.MenuItem(lambda _item: f"状态：{self.gate.status_line()}", None, enabled=False),
+                pystray.MenuItem(lambda _item: f"状态：{self.gate.status_line()}", pystray.Menu(
+                    lambda: (
+                        *(pystray.MenuItem(line, None, enabled=False)
+                          for line in self.manager.status_details()),
+                        pystray.MenuItem(menu_text(f"地址：{self.gate.open_url()}"), self.open),
+                        pystray.MenuItem("查看完整配置", lambda *_: webbrowser.open(
+                            self.gate.open_url() + "configuration")),
+                    ))),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("同步开发进度", self.sync_source,
                                  visible=lambda _: not standalone()),
@@ -1495,7 +1534,7 @@ def run_macos_menu_bar(manager: "ServiceManager", gate: "SetupGate | None" = Non
     pystray 的 darwin 后端漏了 activation policy 和图标尺寸两件必需的事，补齐等于
     重写它那层封装，所以这里直接用 AppKit（见 `peach.menubar`）。Windows 继续走 pystray。
     """
-    from .menubar import MenuBarApp
+    from .menubar import MenuBarApp, Submenu
 
     gate = gate or SetupGate(manager, settings_file.active(), waiting=False)
     versions = VersionManager()
@@ -1586,21 +1625,30 @@ def run_macos_menu_bar(manager: "ServiceManager", gate: "SetupGate | None" = Non
     def take_ownership() -> None:
         run_ledger_action(take_ownership=True)
 
+    def open_configuration() -> None:
+        webbrowser.open(gate.open_url() + "configuration")
+
     menu = MenuBarApp(
         create_icon(template=True),
         "Peach · 蜜桃",
         [
             (gate.open_label, gate.open),
-            (lambda: f"状态：{gate.status_line()}", None),
-            (lambda: f"地址：{gate.open_url()}", None),
+            (lambda: f"状态：{gate.status_line()}", Submenu(lambda: [
+                *((line, None) for line in manager.status_details()),
+                (menu_text(f"地址：{gate.open_url()}"), gate.open),
+                ("查看完整配置", open_configuration),
+            ])),
             (None, None),
-            ("同步开发进度", sync_source),
+            *((("同步开发进度", sync_source),) if not standalone() else ()),
             *ledger_menu_items(
                 lambda label, action: (label, action), sync_ledger, take_ownership),
             ("重启服务", restart),
             ("查看日志", lambda: subprocess.run(["open", str(LOG_DIR)], check=False)),
-            (lambda: f"版本 {state['snapshot'].package_version}"
-                     f" · {state['snapshot'].build_label}", None),
+            ("版本信息", Submenu(lambda: [
+                (f"Peach {state['snapshot'].package_version}", None),
+                (menu_text(state['snapshot'].build_label), None),
+                (menu_text(state['snapshot'].channel_label), None),
+            ])),
             (None, None),
             ("退出 Peach", quit_now),
         ],
@@ -1670,15 +1718,18 @@ def run_macos_menu_bar(manager: "ServiceManager", gate: "SetupGate | None" = Non
 
     stopped = threading.Event()
     threading.Thread(target=poll_health, name="PeachMenuHealth", daemon=True).start()
-    # 启动时先对一次账，之后由网络变化事件驱动（失败按退避重试）。
-    refresh_certificate_with_retry()
-    watcher = NetworkChangeWatcher(on_network_change)
-    watcher.start()
+    watcher = None
+    if not standalone():
+        # 源码部署维护本机 CA；独立应用使用设置中的高位端口。
+        refresh_certificate_with_retry()
+        watcher = NetworkChangeWatcher(on_network_change)
+        watcher.start()
     try:
         menu.run()
     finally:
         stopped.set()
-        watcher.stop()
+        if watcher is not None:
+            watcher.stop()
 
 
 def build_parser() -> argparse.ArgumentParser:

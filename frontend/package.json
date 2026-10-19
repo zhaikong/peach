@@ -6,9 +6,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "vite build --watch",
-    "build": "vite build && vite build -c vite.pages.config.ts",
-    "build:agentation": "vite build -c vite.agentation.config.ts",
+    "dev": "node init && vite build --watch",
+    "build": "node init && vite build && vite build -c vite.pages.config.ts",
+    "build:agentation": "node init && vite build -c vite.agentation.config.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p src/react",
     "lint": "oxlint -c .oxlintrc.json src test e2e",
     "check:copy": "node scripts/copy-check.mjs",

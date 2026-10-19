@@ -365,7 +365,8 @@ def assert_standalone_tunnel(configuration: dict) -> None:
     assert tunnel['available'] is True
 
 
-def complete_first_run(opener, base: str, media: Path, port: int, password: str, *, data_root: Path | None = None) -> None:
+def complete_first_run(opener, base: str, media: Path, port: int, password: str, *,
+                       data_root: Path | None = None, media_root: str | None = None) -> None:
     """首启服务的薄壳与页面包都取得到，再按页面包的提交形态完成一次设置。"""
     with opener.open(base + "/", timeout=5) as response:
         assert 'data-page="setup"' in response.read().decode("utf-8")
@@ -376,6 +377,8 @@ def complete_first_run(opener, base: str, media: Path, port: int, password: str,
                "port": str(port), "mdns_name": "peach", "access_enabled": True,
                "access_password": password, "access_confirm": password,
                "remote_reporting": {"usage": False, "errors": False}}
+    if media_root is not None:
+        answers["media_dir"][0]["root"] = media_root
     if data_root is not None:
         answers["data_root"] = str(data_root)
     request = urllib.request.Request(base + "/api/setup", data=json.dumps(answers).encode(),

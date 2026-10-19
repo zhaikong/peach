@@ -8,7 +8,7 @@
 
 macOS 的标准做法是打成 bundle 并在 `Info.plist` 里声明 `LSUIElement`：只在菜单栏
 出现，不占 Dock、不进 ⌘Tab。外壳本身只有一个 plist 和一个 exec 到项目 venv 的脚本
-——和 Windows 那边一样，托盘不是可移动的独立发行版，服务进程仍由 venv 承担。
+——这是源码开发入口，服务进程仍由 venv 承担。独立发行包走 build_macos_standalone.py。
 """
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ def build_frontend_bundles() -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="生成 macOS 菜单栏项的 .app 外壳")
-    parser.add_argument("--destination", type=Path, default=PROJECT_ROOT / "dist")
+    parser.add_argument("--destination", type=Path, default=PROJECT_ROOT / "dist" / "macos-source.noindex")
     parser.add_argument("--tray", type=Path, default=PROJECT_ROOT / ".venv" / "bin" / "peach-tray")
     return parser
 

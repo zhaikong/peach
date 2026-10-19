@@ -148,6 +148,34 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(kinds["README.md"], "unsafe")
         self.assertEqual(runner.scopes_for_changes(paths, kinds=kinds)[0], ("full",))
 
+    def test_known_file_addition_and_deletion_follow_their_domain(self):
+        name = "src/peach/web_follow.py"
+        path = self.repo / name
+        path.write_text("value = 1\n", encoding="utf-8")
+        self.git("add", "--", name)
+        contents = runner.changed_contents(self.repo, "HEAD", [name])
+        self.assertEqual(runner.scopes_for_changes([name], contents=contents)[0], ("follow",))
+        self.git("commit", "-m", "test: fixture")
+        path.unlink()
+        contents = runner.changed_contents(self.repo, "HEAD", [name])
+        self.assertEqual(runner.scopes_for_changes([name], contents=contents)[0], ("follow",))
+
+    def test_known_python_file_execute_mode_requires_full(self):
+        name = "src/peach/web_follow.py"
+        (self.repo / name).write_text("value = 1\n", encoding="utf-8")
+        self.git("add", "--", name)
+        self.git("commit", "-m", "test: fixture")
+        self.git("update-index", "--chmod=+x", name)
+        contents = runner.changed_contents(self.repo, "HEAD", [name])
+        self.assertEqual(runner.scopes_for_changes([name], contents=contents)[0], ("full",))
+
+    def test_python_symlinks_require_full_for_each_change_kind(self):
+        name = "src/peach/web_follow.py"
+        for modes in (":000000 120000", ":120000 120000", ":120000 000000"):
+            with self.subTest(modes=modes), mock.patch.object(evidence, "git", return_value=modes):
+                contents = runner.changed_contents(self.repo, "HEAD", [name])
+            self.assertEqual(runner.scopes_for_changes([name], contents=contents)[0], ("full",))
+
     def test_repeated_import_path_preserves_dependency_identity(self):
         site = self.root / "site"
         metadata = site / "peach_evidence_probe-1.0.dist-info" / "METADATA"

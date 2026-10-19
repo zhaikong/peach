@@ -22,7 +22,7 @@ export function Note(
       {/* 窄屏放不下时按钮换到下一行：挤成两个字一行的按钮比换行更难认。 */}
       <div data-note-layout="" className={cx('flex flex-col items-start gap-3',
         actionLayout === 'inline' && '@xl:flex-row @xl:items-center @xl:justify-between')}>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5 self-stretch">
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 self-stretch">
           {/* 正文常是服务端原话：长 URL、堆栈和多行原因照原样换行，不撑宽所在的卡。 */}
           {title ? <p className="text-body-medium wrap-anywhere">{title}</p> : null}
           <p className="whitespace-pre-line text-body-2-regular wrap-anywhere">{children}</p>

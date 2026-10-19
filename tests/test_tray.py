@@ -213,6 +213,43 @@ class ServiceStatusTests(unittest.TestCase):
         self.assertEqual(manager.status(), "HTTPS 正常（CloudDrive · 115：没有权限读取）")
         popen.assert_not_called()
 
+    def test_short_summary_deduplicates_mount_warnings_and_recovers(self):
+        warnings = ["本地磁盘：目录不存在", "CloudDrive · 115：" + "很长的目录/" * 40]
+        response = Mock(status_code=200)
+        response.json.return_value = {"ok": True, "media_mounts": {"warnings": warnings}}
+        manager = self.manager({"http": (False, "未检测"), "https": (False, "未检测")})
+        manager._health_get = lambda *a, **k: response
+        for spec in manager.specs:
+            self.assertTrue(manager.healthy(spec))
+        self.assertEqual(manager.status_summary(), "运行中 · 2 项提醒")
+        self.assertEqual(manager.status_details()[:3], ("HTTP 正常", "HTTPS 正常", warnings[0]))
+        self.assertTrue(manager.status_details()[-1].endswith("…"))
+        self.assertTrue(all(len(line) <= 48 for line in manager.status_details()))
+        response.json.return_value = {"ok": True, "media_mounts": {"warnings": []}}
+        for spec in manager.specs:
+            manager.healthy(spec)
+        self.assertEqual(manager.status_summary(), "运行中")
+        self.assertEqual(manager.status_details(), ("HTTP 正常", "HTTPS 正常"))
+
+    def test_short_summary_preserves_service_failures(self):
+        manager = self.manager({"http": (True, ""), "https": (False, "状态码 503")})
+        self.assertEqual(manager.status_summary(), "部分服务异常")
+        self.assertEqual(manager.status_details(), ("HTTP 正常", "HTTPS 异常（状态码 503）"))
+        self.assertEqual(self.manager({"http": (False, "无响应")}).status_summary(), "服务未运行")
+
+    def test_windows_style_menu_keeps_details_out_of_the_root_and_refreshes(self):
+        manager = self.manager({"http": (True, "")})
+        with patch("peach.tray.pystray.Icon") as icon:
+            tray = PeachTray(manager)
+        root = icon.call_args.args[3]
+        status = next(item for item in root.items if item.text.startswith("状态："))
+        self.assertEqual(status.text, "状态：运行中")
+        self.assertIn("HTTP 正常", [item.text for item in status.submenu.items])
+        manager._last_health["http"] = (False, "无响应")
+        self.assertEqual(status.text, "状态：服务未运行")
+        self.assertIn("HTTP 异常（无响应）", [item.text for item in status.submenu.items])
+        self.assertIs(tray.manager, manager)
+
     def test_partial_names_the_broken_one_with_reason(self):
         self.assertEqual(
             self.manager({"http": (True, ""), "https": (False, "状态码 503")}).status(),
@@ -705,23 +742,6 @@ class SourceSyncTests(unittest.TestCase):
 
         self.assertFalse(launchd_owns_this_process(
             Mock(return_value=Mock(returncode=113, stdout="")), uid=501))
-
-    def test_the_menu_lists_source_sync_next_to_the_ledger_actions(self):
-        """标签和位置是语义契约：菜单只有一条，写错了没有第二处会报错。"""
-        from peach import tray as tray_module
-
-        source = inspect.getsource(tray_module.run_macos_menu_bar)
-        labels = [
-            line.split('"')[1]
-            for line in source.splitlines()
-            if line.strip().startswith('("') and '",' in line
-        ]
-        self.assertIn("同步开发进度", labels)
-        # 两个 Ledger 项由 `ledger_menu_items` 统一给出（复制关掉时为空），
-        # 位置契约因此变成「同步开发进度 紧挨着那次调用之前」。
-        self.assertLess(source.index("同步开发进度"), source.index("ledger_menu_items"))
-        self.assertLess(source.index("ledger_menu_items"), source.index("重启服务"))
-        self.assertIn("sync_source", source)
 
     def test_windows_tray_lists_source_sync_next_to_ledger(self):
         source = inspect.getsource(PeachTray.__init__)

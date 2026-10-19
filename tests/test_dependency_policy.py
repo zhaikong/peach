@@ -103,6 +103,7 @@ class DependencyPolicyTests(unittest.TestCase):
             "bs4": "beautifulsoup4",
             "curl_cffi": "curl_cffi",
             "cv2": "opencv-python-headless",
+            "dmgbuild": "dmgbuild",
             "fastapi": "fastapi",
             "filelock": "filelock",
             "google": "protobuf",

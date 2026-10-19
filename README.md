@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://peach.video">官网</a> ·
-  <a href="https://github.com/peach-mitao/peach/releases">下载 Windows 版</a> ·
+  <a href="https://github.com/peach-mitao/peach/releases">下载安装包</a> ·
   <a href="https://demo.peach.video">在线演示</a> ·
   <a href="https://github.com/peach-mitao/peach/releases/tag/intro-video">介绍视频</a> ·
   <a href="https://github.com/peach-mitao/peach/issues">问题反馈</a> ·
@@ -23,7 +23,7 @@
   <a href="https://github.com/peach-mitao/peach/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/peach-mitao/peach/test.yml?branch=master&amp;label=tests&amp;logo=githubactions&amp;logoColor=white" alt="CI 状态"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue?logo=gnu&amp;logoColor=white" alt="license"></a>
   <a href="docs/TESTING_DESKTOP.md"><img src="https://img.shields.io/badge/Windows-x64-0078D4" alt="Windows x64"></a>
-  <a href="docs/OPERATIONS.md#从源码运行windowsmacos"><img src="https://img.shields.io/badge/macOS-source-555555?logo=apple&amp;logoColor=white" alt="macOS 源码运行"></a>
+  <a href="docs/OPERATIONS.md#macos-独立测试包"><img src="https://img.shields.io/badge/macOS-DMG-555555?logo=apple&amp;logoColor=white" alt="macOS 独立应用构建与安装"></a>
   <img src="https://img.shields.io/badge/18%2B-adult%20content-critical" alt="18+ 成人内容">
 </p>
 
@@ -91,6 +91,12 @@ https://github.com/user-attachments/assets/a5610874-e611-41bb-be22-7d99f0d64b62
 完整安装包携带媒体工具，可离线安装；轻量安装包体积更小，安装时按需下载工具。
 
 测试版尚未签名。若 Windows 提示「已保护你的电脑」，确认来自本项目的 Release，再点「更多信息 → 仍要运行」。安装、更新和故障排查见 [Windows 使用说明](docs/TESTING_DESKTOP.md)。
+
+### macOS 本机构建
+
+macOS 可在本机构建独立 `.app` 与 DMG，运行不需要 Python、源码或另一台电脑。构建与安装见 [macOS 独立测试包](docs/OPERATIONS.md#macos-独立测试包)。
+
+发版流程分别生成 Apple Silicon（`macos-arm64.dmg`）与 Intel（`macos-x86_64.dmg`）测试包；可下载版本以 [Releases](https://github.com/peach-mitao/peach/releases) 的实际资产为准。在「关于本机」确认芯片，打开对应镜像并将 Peach 拖入「应用程序」。测试包未完成 Apple 公证，媒体工具需另行准备。
 
 ### 从源码运行（Windows、macOS）
 

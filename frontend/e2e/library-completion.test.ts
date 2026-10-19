@@ -51,11 +51,25 @@ describe('缺预览时的统一补全入口', () => {
             text: text.getBoundingClientRect().toJSON(), action: action.getBoundingClientRect().toJSON() };
         });
         assert.ok(placement.inline && placement.arrow, JSON.stringify(placement));
-        assert.ok(placement.action.top >= placement.text.bottom + 8, JSON.stringify(placement));
-        assert.ok(Math.abs(placement.action.left - placement.text.left) < 1, JSON.stringify(placement));
+        if (viewport.mobile) {
+          assert.ok(placement.action.top >= placement.text.bottom + 8, JSON.stringify(placement));
+          assert.ok(Math.abs(placement.action.left - placement.text.left) < 1, JSON.stringify(placement));
+        } else {
+          assert.ok(placement.action.left >= placement.text.right + 8,
+            `宽容器中按钮应位于说明右侧：${JSON.stringify(placement)}`);
+          assert.ok(placement.action.top < placement.text.bottom,
+            `宽容器中按钮不应另起一行：${JSON.stringify(placement)}`);
+          const textCenter = placement.text.top + placement.text.height / 2;
+          const actionCenter = placement.action.top + placement.action.height / 2;
+          assert.ok(Math.abs(textCenter - actionCenter) <= 1,
+            `说明文字应与按钮垂直居中：${JSON.stringify(placement)}`);
+        }
         await prompt.evaluate(element => { element.style.width = '320px' });
         const narrowText = await prompt.locator('p').boundingBox();
+        const narrowAction = await prompt.locator('[data-note-action]').boundingBox();
         assert.ok(narrowText && narrowText.width >= 280, '窄容器中的提示正文应独占一行宽度');
+        assert.ok(narrowAction && narrowAction.y >= narrowText.y + narrowText.height + 8,
+          '窄容器中按钮应退到说明下方');
         await prompt.evaluate(element => { element.style.width = '' });
         if (viewport.mobile) {
           const text = await prompt.locator('p').boundingBox();
