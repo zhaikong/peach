@@ -68,7 +68,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
               "test_providers.py", "test_segments.py", "test_streaming.py",
               "test_subtitles.py", "test_transcodes.py", "test_hardware_transcode.py", "test_strm.py",
               "test_guangya_sources.py", "test_media_sources.py"),
-    "sync": ("test_sync*.py", "test_platform.py", "test_mount.py", "test_tray*.py", "test_log_retention.py",
+    "sync": ("test_sync*.py", "test_platform.py", "test_mount.py", "test_tray*.py", "test_macos_standalone.py", "test_log_retention.py",
              "test_mdns.py", "test_netwatch.py", "test_certs.py",
              "test_review_mirror.py", "test_runtime_prepare.py"),
     "metadata": ("test_custom_metadata.py", "test_scraping_access.py", "test_browser_transport.py", "test_metadata*.py", "test_genre_taxonomy.py", "test_processing_control.py",
@@ -109,7 +109,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
                 "test_agent_worktree.py", "test_test_evidence.py", "test_test_environment.py", "test_dependency_policy.py",
                 "test_version_bump.py", "test_changelog.py", "test_release_due.py",
                 "test_restart_windows_tray.py", "test_deploy_windows_tray.py", "test_runtime_prepare.py",
-                "test_buildinfo.py", "test_versioning.py",
+                "test_buildinfo.py", "test_versioning.py", "test_macos_standalone.py",
                 "test_windows_update.py", "test_release_updates.py", "test_automatic_updates.py", "test_standalone_update.py", "test_certs.py", "test_config.py",
                 "test_fsutil.py", "test_desktop_settings.py", "test_desktop_installer.py",
                 "test_job_status.py", "test_jobs.py", "test_task_runs.py", "test_followups.py", "test_update_tasks.py",
@@ -145,7 +145,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
              "test_platform.py", "test_mount.py", "test_tray.py", "test_certs.py",
              "test_folder_picker.py", "test_fsutil.py", "test_runtime_consistency.py",
              "test_subprocess_encoding.py", "test_windows_update.py", "test_buildinfo.py"),
-    "packaging": ("test_dependency_policy.py", "test_buildinfo.py", "test_onboarding.py",
+    "packaging": ("test_dependency_policy.py", "test_buildinfo.py", "test_onboarding.py", "test_macos_standalone.py",
                   "test_cli.py", "test_server.py", "test_versioning.py", "test_frontend_build.py",
                   "test_cloudflared_packaging.py", "test_desktop_installer.py",
                   "test_ffmpeg_build.py", "test_ffmpeg_bundle.py", "test_untrunc_build.py"),
@@ -184,6 +184,7 @@ AUTO_SCOPE_FILES: dict[str, tuple[str, ...]] = {
     "src/peach/routes_pages.py": ("catalog", "tooling", "web"),
     # 托盘既是 sync 域的服务编排，也被版本与桌面设置那些 tooling 测试读源码。
     "src/peach/tray.py": ("sync", "tooling"),
+    "src/peach/menubar.py": ("sync", "tooling"),
     # 托盘子服务与隧道的 cloudflared 共用这份 Job Object；两边的测试都要跑到。
     "src/peach/process_job.py": ("tooling", "sync"),
     # 托盘重启的实现由 `test_restart_windows_tray.py` 验，模块名推不出来。
@@ -412,7 +413,8 @@ def changed_contents(root: Path, base: str, paths: Iterable[str]) -> dict:
             continue
         try:
             raw = test_evidence.git(root, "diff", "--raw", base, "--", path)
-            if raw and len(raw.split()) >= 2 and raw.split()[0].lstrip(":") != raw.split()[1]:
+            modes = [part.lstrip(":") for part in raw.split()[:2]]
+            if "120000" in modes or (len(modes) == 2 and "000000" not in modes and modes[0] != modes[1]):
                 result[path] = (None, None)
                 continue
             result[path] = (test_evidence.git(root, "show", f"{base}:{path}"),

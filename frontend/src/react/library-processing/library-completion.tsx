@@ -65,7 +65,7 @@ function Completion({ assetIds, onComplete }: { assetIds: number[]; onComplete?(
   const message = problem || (start.isPending ? '正在启动补全…'
     : outcome || `这批影片中有 ${assetIds.length.toLocaleString()} 部暂无预览，可补全资料与图片。`);
   return <section aria-label="补全预览" aria-live="polite" data-library-completion="" className="@container mb-4">
-    <Note tone={problem ? 'warning' : 'neutral'} actionLayout="below" action={<div className="flex flex-wrap items-center gap-2"><ProcessingActions busy={busy} metadataOnly={state?.metadata_only} onRun={command => {
+    <Note tone={problem ? 'warning' : 'neutral'} action={<div className="flex flex-wrap items-center gap-2"><ProcessingActions busy={busy} metadataOnly={state?.metadata_only} onRun={command => {
       if (busy) return;
       setOutcome('');
       start.mutate(command);

@@ -1,6 +1,6 @@
 # Windows 测试版
 
-Windows 版提供完整安装包、轻量安装包和免安装包，均无需另装 Python、Git、Node 或 OpenSSL。macOS 请按[源码运行](OPERATIONS.md#从源码运行windowsmacos)安装。
+Windows 版提供完整安装包、轻量安装包和免安装包，均无需另装 Python、Git、Node 或 OpenSSL。macOS 的 DMG 构建、安装和测试包限制见 [macOS 独立测试包](OPERATIONS.md#macos-独立测试包)。
 
 | 文件 | 用途 |
 | --- | --- |

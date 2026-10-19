@@ -19,6 +19,38 @@ macOS 安装依赖：`uv sync --locked --python 3.14 --extra macos`。完成后�
 
 托盘会打开浏览器中的首次设置页。源码运行不需要下载 Windows 安装包。
 
+## macOS 独立测试包
+
+在 macOS 的项目目录安装构建依赖：
+
+```sh
+MACOSX_DEPLOYMENT_TARGET=11.0 uv sync --locked --extra build --extra macos
+```
+
+构建包含 Python、页面、迁移和资源的应用与 DMG：
+
+```sh
+./.venv/bin/python -X utf8 scripts/build_macos_standalone.py
+```
+
+产物在 `dist/macos.noindex/<架构>/`，构建副本避开 Spotlight 索引；日常使用只保留 Applications 里的应用，测试结束卸载已挂载的安装镜像。Apple Silicon 使用 `arm64`，Intel 使用 `x86_64`；分别用对应架构的 Python 与依赖构建。`--target-arch` 显式指定目标，解释器架构不匹配会停止，两个包不混合原生扩展，也不直接合并成 universal2。Intel 构建可在 Intel Mac 或 Rosetta 下的 x86_64 Python 环境完成；Rosetta 验收不能代替 Intel 真机和较旧 macOS 的验收。
+
+源码开发外壳 `build_macos_app.py` 默认输出到 `dist/macos-source.noindex/`，依赖本机 venv 与 LaunchAgent；不要把它当作独立应用安装。
+
+构建脚本读取随包 Mach-O 的系统版本下限，填入 `LSMinimumSystemVersion` 并重新签名。构建解释器也必须支持目标系统；Homebrew Python 可能要求构建机的系统版本。`watchdog` 等本机编译扩展若命中旧缓存，需带部署目标和对应的 `ARCHFLAGS`，通过 `uv sync --locked --extra build --extra macos --no-cache --reinstall-package watchdog --no-binary-package watchdog` 重编，再核对产物报告的 `minimum_macos`。
+
+打开匹配架构的 DMG，把 `Peach.app` 拖入 Applications，再打开应用完成首次设置。菜单栏提供打开页面、重启和退出入口；数据默认保存在 `~/Library/Application Support/Peach/peach-data`，可用 `PEACH_DATA_ROOT` 指定独立目录。
+
+安装镜像使用浅桃色背景，固定左侧 Peach、右侧 Applications 的拖放布局，隐藏工具栏与边栏，背景同时提供标准与 Retina 分辨率。许可证保留在应用的 `Contents/Resources/LICENSE`，安装窗口只显示两个入口。
+
+版本标签触发 Release 工作流，在 Apple Silicon 与 Intel 原生 runner 分别构建，再由干净 runner 下载并挂载 DMG，验证签名、架构和独立运行。两种 DMG 与 Windows 安装包全部通过后，才一同上传到 GitHub 预发布，统一生成 SHA-256 清单。手动运行工作流只验收候选制品，不创建 Release；推送普通提交不会触发安装包构建。发版检查见[测试与依赖](TESTING.md#每次发版检查)，打标签统一使用 `scripts/release_tag.py`。
+
+Mac 与 Windows 托盘的首层只显示简短状态与提醒数量，展开状态子菜单按行查看服务和媒体来源。长地址与路径会缩略，子菜单中的「查看完整配置」保留完整设置入口；提醒消失后会随下一轮健康检查更新。
+
+单机设置默认关闭账本复制，不需要 Windows、SMB、LaunchAgent 或系统端口转发。各台电脑各自保存数据；共享馆藏仍按下文的[双机复制](#两台电脑之间的复制)配置，离线修改不能自动合并。已有数据目录不会自动导入。
+
+这条构建路径使用本地 ad-hoc 签名，未完成 Developer ID 签名和 Apple 公证，不作为已签名发行包发布。DMG 只分发应用，不安装系统服务；需要集中部署系统组件时再评估 PKG。转码与抽帧使用本机 FFmpeg，本测试包未内置媒体工具、cloudflared 或 macOS 在线更新安装器。
+
 ## 首次运行与设置文件
 
 第一次打开 Peach 有两种方式，结果相同：
