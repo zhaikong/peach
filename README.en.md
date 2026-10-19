@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://peach.video">Website</a> ·
-  <a href="https://github.com/peach-mitao/peach/releases">Download for Windows</a> ·
+  <a href="https://github.com/peach-mitao/peach/releases">Download installers</a> ·
   <a href="https://demo.peach.video">Live demo</a> ·
   <a href="https://github.com/peach-mitao/peach/releases/tag/intro-video">Intro video</a> ·
   <a href="https://github.com/peach-mitao/peach/issues">Report a problem</a> ·
@@ -23,7 +23,7 @@
   <a href="https://github.com/peach-mitao/peach/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/peach-mitao/peach/test.yml?branch=master&amp;label=tests&amp;logo=githubactions&amp;logoColor=white" alt="CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue?logo=gnu&amp;logoColor=white" alt="license"></a>
   <a href="docs/TESTING_DESKTOP.md"><img src="https://img.shields.io/badge/Windows-x64-0078D4" alt="Windows x64"></a>
-  <a href="docs/OPERATIONS.md#从源码运行windowsmacos"><img src="https://img.shields.io/badge/macOS-source-555555?logo=apple&amp;logoColor=white" alt="macOS from source"></a>
+  <a href="docs/OPERATIONS.md#macos-独立测试包"><img src="https://img.shields.io/badge/macOS-DMG-555555?logo=apple&amp;logoColor=white" alt="Build and install the standalone macOS app"></a>
   <img src="https://img.shields.io/badge/18%2B-adult%20content-critical" alt="18+ adult content">
 </p>
 
@@ -91,6 +91,12 @@ Try search, filters and profiles in the [read-only demo](https://demo.peach.vide
 The full installer includes media tools for offline installation. The smaller lite installer downloads tools as needed during setup.
 
 Test builds are unsigned. If Windows says “Windows protected your PC”, confirm the file came from this project's Releases, then choose “More info → Run anyway”. See the [Windows guide](docs/TESTING_DESKTOP.md) for installation, updates and troubleshooting.
+
+### Build on macOS
+
+Build a self-contained `.app` and DMG locally on macOS. Running it requires neither Python, a source checkout, nor another computer. See [the macOS build guide](docs/OPERATIONS.md#macos-独立测试包).
+
+The release workflow generates separate Apple Silicon (`macos-arm64.dmg`) and Intel (`macos-x86_64.dmg`) test packages. Check the actual assets on [Releases](https://github.com/peach-mitao/peach/releases) for availability. Check your chip in About This Mac, open the matching image, and drag Peach into Applications. Test packages are not notarized; media tools must be installed separately.
 
 ### Run from source (Windows, macOS)
 

@@ -495,10 +495,14 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
       assert.ok(spacing.space > 2 && Math.abs(spacing.gap - spacing.space) < 0.5,
         `名字与计数隔了 ${spacing.gap}px，一个空格是 ${spacing.space}px`);
       const glyph = page.locator('#index svg:has(use[href="#i-text-aa"])');
-      assert.deepEqual(await glyph.evaluate((element) => {
+      const letterGlyph = await glyph.evaluate((element) => {
         const style = getComputedStyle(element);
-        return [style.width, style.height];
-      }), ['16px', '16px']);
+        const ink = (element as SVGSVGElement).getBBox();
+        return { width: parseFloat(style.width), height: parseFloat(style.height), inkHeight: ink.height };
+      });
+      assert.equal(letterGlyph.height, 16);
+      assert.ok(letterGlyph.width / letterGlyph.height > 1.4, '字母表字形按高度保留横向比例');
+      assert.ok(letterGlyph.inkHeight / 24 > 0.8, '字母表字形的实际墨迹占满同级图标活区');
       assert.deepEqual(opened.problems, []);
     } finally {
       await opened.close();

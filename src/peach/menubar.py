@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Callable
 
 import AppKit
@@ -72,63 +73,80 @@ class _Target(AppKit.NSObject):
         self._dispatch(sender)
 
 
+@dataclass(frozen=True)
+class Submenu:
+    """原生子菜单；每次刷新取得当前的服务与提醒行。"""
+
+    items: Callable[[], list[tuple[object, object]]]
+
+
 class MenuBarApp:
     """一个菜单栏状态项，外加它的下拉菜单。
 
-    `items` 是 (标题, 处理函数或 None) 的序列；处理函数为 None 表示只读信息行，
-    标题可以是可调用对象，每次打开菜单时重新求值。
+    `items` 是 (标题, 处理函数、Submenu 或 None) 的序列；None 表示只读信息行。
+    动态标题和子菜单每五秒刷新，内容不变时保留原菜单。
     """
 
     def __init__(
         self,
         image: Image.Image,
         tooltip: str,
-        items: list[tuple[object, Callable[[], None] | None]],
+        items: list[tuple[object, Callable[[], None] | Submenu | None]],
     ):
         self.app = AppKit.NSApplication.sharedApplication()
         # 附件应用：只在菜单栏出现，不占 Dock、不进 ⌘Tab。bundle 里 LSUIElement 也声明了
         # 一次，但直接从终端跑时只有这句管用。
         self.app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
 
-        self._titles: list[tuple[AppKit.NSMenuItem, object]] = []
-        handlers: dict[int, Callable[[], None]] = {}
-        menu = AppKit.NSMenu.alloc().init()
-        # 每次打开前刷新动态标题（状态、版本这些）。
-        menu.setAutoenablesItems_(False)
-        for index, (title, handler) in enumerate(items):
-            if title is None:
-                menu.addItem_(AppKit.NSMenuItem.separatorItem())
-                continue
-            text = title() if callable(title) else str(title)
-            entry = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(text, None, "")
-            entry.setTag_(index)
-            if handler is None:
-                entry.setEnabled_(False)
-            else:
-                handlers[index] = handler
-            menu.addItem_(entry)
-            self._titles.append((entry, title))
-
-        self._target = _Target.alloc().initWithHandlers_(handlers)
-        for entry, _ in self._titles:
-            if entry.tag() in handlers:
-                entry.setTarget_(self._target)
-                entry.setAction_("invoke:")
-                entry.setEnabled_(True)
+        self._items = items
+        self._handlers: dict[int, Callable[[], None]] = {}
+        self._target = _Target.alloc().initWithHandlers_(self._handlers)
+        self._rendered = None
 
         self.item = AppKit.NSStatusBar.systemStatusBar().statusItemWithLength_(
             AppKit.NSVariableStatusItemLength)
         self.item.button().setImage_(nsimage(image))
         self.item.button().setToolTip_(tooltip)
-        self.item.setMenu_(menu)
+        self.refresh_titles()
         self.item.setVisible_(True)
-        self.menu = menu
+
+    def _resolve(self, items):
+        return [(title() if callable(title) else title,
+                 self._resolve(handler.items()) if isinstance(handler, Submenu) else handler)
+                for title, handler in items]
+
+    def _menu(self, items):
+        menu = AppKit.NSMenu.alloc().init()
+        menu.setAutoenablesItems_(False)
+        for title, handler in items:
+            if title is None:
+                menu.addItem_(AppKit.NSMenuItem.separatorItem())
+                continue
+            entry = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(str(title), None, "")
+            if isinstance(handler, list):
+                entry.setSubmenu_(self._menu(handler))
+                entry.setEnabled_(True)
+            elif handler is None:
+                entry.setEnabled_(False)
+            else:
+                index = len(self._handlers)
+                self._handlers[index] = handler
+                entry.setTag_(index)
+                entry.setTarget_(self._target)
+                entry.setAction_("invoke:")
+                entry.setEnabled_(True)
+            menu.addItem_(entry)
+        return menu
 
     def refresh_titles(self) -> None:
-        """重算动态标题。菜单是现取现画的，打开前刷一次就够。"""
-        for entry, title in self._titles:
-            if callable(title):
-                entry.setTitle_(title())
+        """同时更新摘要与子菜单；已消失的提醒和旧动作不留在原生菜单里。"""
+        rendered = self._resolve(self._items)
+        if rendered == self._rendered:
+            return
+        self._handlers.clear()
+        self.menu = self._menu(rendered)
+        self.item.setMenu_(self.menu)
+        self._rendered = rendered
 
     def placement(self) -> tuple[float, float, float, float] | None:
         """状态项在屏幕上的位置；拿不到窗口说明它根本没被放上菜单栏。"""

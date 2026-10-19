@@ -236,10 +236,95 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  macos:
+    name: macOS ${{ matrix.arch }} 独立测试包
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+      ARCHFLAGS: '-arch ${{ matrix.arch }}'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: 创建原生架构构建环境
+        run: |
+          uv sync --locked --all-extras --python python
+          uv pip check --python .venv/bin/python
+          npm ci --prefix frontend
+      - name: 构建独立应用与拖放安装镜像
+        run: .venv/bin/python scripts/build_macos_standalone.py --target-arch '${{ matrix.arch }}' --destination release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-candidate-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            release/*.dmg
+            scripts/smoke_macos.py
+            scripts/smoke_desktop.py
+            scripts/MACOS_DOWNLOADS.md
+
+  macos-smoke:
+    name: macOS ${{ matrix.arch }} 仅下载制品验收
+    needs: macos
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: macos-candidate-${{ matrix.arch }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: 挂载镜像并在源码树外验证应用
+        shell: bash
+        run: |
+          set -euo pipefail
+          image=(release/*-macos-${{ matrix.arch }}.dmg)
+          test "${#image[@]}" -eq 1
+          mount="$RUNNER_TEMP/Peach-install"
+          mkdir -p "$mount"
+          hdiutil verify "${image[0]}"
+          hdiutil attach "${image[0]}" -readonly -nobrowse -mountpoint "$mount"
+          trap 'hdiutil detach "$mount"' EXIT
+          test "$(readlink "$mount/Applications")" = /Applications
+          test -s "$mount/Peach.app/Contents/Resources/LICENSE"
+          codesign --verify --deep --strict "$mount/Peach.app"
+          lipo -verify_arch '${{ matrix.arch }}' "$mount/Peach.app/Contents/MacOS/Peach"
+          python scripts/smoke_macos.py "$mount/Peach.app"
+
   release:
     name: GitHub 预发布
     if: github.ref_type == 'tag'
-    needs: [windows, desktop-smoke]
+    needs: [windows, desktop-smoke, macos-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -249,6 +334,11 @@ jobs:
         with:
           name: desktop-candidate
           path: release
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: macos-candidate-*
+          merge-multiple: true
+          path: macos-candidates
       - name: 创建预发布
         env:
           GH_TOKEN: ${{ github.token }}
@@ -256,8 +346,10 @@ jobs:
           VERSION: ${{ needs.windows.outputs.version }}
         run: |
           cd release
-          sha256sum ./*.zip ./*-setup.exe > SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" ./*.zip ./*-setup.exe SHA256SUMS.txt --verify-tag --prerelease --title "Peach $VERSION · Windows 测试版" --notes-file RELEASE_NOTES.md
+          cp ../macos-candidates/release/*.dmg .
+          tail -n +4 ../macos-candidates/scripts/MACOS_DOWNLOADS.md >> RELEASE_NOTES.md
+          sha256sum ./*.zip ./*-setup.exe ./*.dmg > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" ./*.zip ./*-setup.exe ./*.dmg SHA256SUMS.txt --verify-tag --prerelease --title "Peach $VERSION · Windows / macOS 测试版" --notes-file RELEASE_NOTES.md
 
   project-board:
     name: 同步已发布版本到看板
